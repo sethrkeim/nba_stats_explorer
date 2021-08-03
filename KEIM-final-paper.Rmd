@@ -1,0 +1,464 @@
+---
+title: "Final Paper"
+author: "Seth Keim"
+date: "1/31/2021"
+output: 
+  pdf_document:
+    fig_width: 4
+    fig_height: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(nbastatR)
+library(ggpubr)
+library(ggtext)
+
+
+my_theme = theme_bw() + 
+  theme(text = element_text(family = "Helvetica", size = 12),
+        plot.title.position = "plot",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        plot.title = element_text(face="bold"))
+
+assign_nba_players()
+```
+
+# Introduction 
+
+|    The never-ending debate: “Who is the greatest basketball player of all time, LeBron James or Michael Jordan?” After LeBron James won his fourth NBA title in 2020, the question is now more controversial than ever. The main issue with this question is that everyone has a different definition of “greatest”. Does greatest mean which player would you choose to be on your team first, or which player was the most successful during their career, or some combination of the two? In the end, “greatest” can be subjective. In this analysis, the impact on the game over time will be analyzed for both Michael Jordan and LeBron James, as well as other NBA players. Impact, in this way, means the amount of influence a player has on the outcome of any particular game. 
+|    This metric will still be imperfect. As such, this analysis will not seek to find a definite answer the question of which player is the greatest. However, it will look at the impact of many NBA players over time, in the regular and post seasons. The topic of determining impact in basketball (or any sport, for that matter) is a vital one for coaches, players, and commentators, and an interesting one for fans. For coaches, analyzing players performance can unlock insights that can increase performance of the team. For players, determining their own impact will help them improve that impact. 
+|    The question this analysis will focus on is: how much impact did Michael Jordan, LeBron James, and other NBA players have on the games they play, and what are the best ways to quantify and display it? We will look at four main ways to quantify greatness and data visualizations for each. First, looking at per game stats for each season a player plays can show the players quality throughout their career. Some players, with LeBron as an example, change their playstyle as their career progresses. When LeBron was young, he focused on driving to the basket and scoring. However, as he has aged and become less quick, he has focused much more on passing and shooting. Looking at trends over time can reveal these types of things. Second, we will look at career total stats. These are good gages of a players accomplishments and how impressive they are compared to other NBA greats. If a player is a great scorer when they were young, but falls off quick and ends up retiring relatively early, that will show up as fewer career total stats. This seems less impressive as compared to a player which was much more consistent throughtout their career and managed to still be competetive at an older age. Third, we look at the impact on their teams, and the success of those teams. While individual stats can be useful in looking at how talented a player is, it also leaves out the impact that player has on the rest of the team. A player can have terrible personal stats and still make the players around them much better, which is hugely beneficial to the team. It can also be the case that a player can have great stats, but they have the ball too much and actually makes the team perform worse. Finally, we look at the rank of a player in a specific stat for each season. This allows comparison of a player against their respective league. It may be that comparing hard numbers for stats between a player in the 1970s and the 2010s is unfair. The three point line did not exist until 1979, so it is likely that players were typically scoring less than there were later on with the 3 point line. The limitations of this would occur in the situation that the players of one era are just worse than another era. A player could be dominant in the worse era, but this would be misleading as the league their playing against is just less competitive than leagues other players have played in. 
+|    All of these forms of analysis will contribute to the research question. Likely, the answers will come with nuance. Different players may dominant different aspects of the game. Exploring this nuance will be the main goal of the analysis. As was discussed earlier, there are many different definitions of greatness, and even impact on the game can be subjective. Analyzing specific parts of the game, like finals, playoffs, and regular season, or comparison against the current league or historically, or defensive or offensive stats can tell the story of the best basketball players to play the game depending on the lens you look at them through. 
+|    The data used in this paper is obtained using the NBAstatR R package. This package pulls NBA data from Basketball-Reference, a website that contains NBA throughout its history. It includes player totals, player per-game stats, and team stats. 
+
+
+
+
+
+# Methods
+
+## Pulling in the data
+
+### Create Functions to get data from nbastatr api and return it partially cleaned
+```{r}
+library(nbastatR)
+assign_nba_players()
+return_player_stats <- function(player) {
+  return(as.data.frame(players_careers(players = player, modes = "PerGame")[[1, 5]]) %>% 
+           mutate(playerName = player) %>% mutate(year = sub("..-", "", slugSeason)))
+}
+
+return_total_stats <- function(player) {
+  return(as.data.frame(players_careers(players = player, modes = "Totals")[[2, 5]]) %>% 
+           mutate(playerName = player))
+}
+
+return_season_total_stats <- function(player) {
+  return(as.data.frame(players_careers(players = player, modes = "Totals")[[1, 5]]) %>% 
+           mutate(playerName = player) %>% mutate(year = sub("..-", "", slugSeason)))
+}
+```
+To get all the necessary data, we must use the nbastatR package in R. This package contains a multitude of functions that scrape basketball statistics from Basketbal Reference, a basketball data site. The package allows calling every basketball player  that has ever played in the league, and also has in depth statistics by per game stats or total stats. To get all the necessary data, we must loop through all the players and call the function "players_careers". This will return the data we need for each specific player. Then, appending each new player stats to one data frame will put all of the data in one place. Since this package hits the website Basketball Reference, it is actually somewhat difficult to call functions a large number of times. In this case, the website recognizes that the same user is getting its data many times and shuts off access to the website. This posed a difficult problem to solve at first.However, by calling the function for 300 players at a time, the website never reached its limit. After 300 players stats were obtained, restarting the R session allowed for the website to reset and repeat the process. There were a total of over 4500 players, so this process had to be repeated 15 times. Each time, the new dataset had to be appended to the existing dataset and saved to a csv so the data was stored and not deleted with the R session was restarted. 
+
+### Create dataset with all current and historical NBA players stats
+
+Once the data scraping is done, we have a dataset with all the players stats per game every season that they played. This ends up being almost 26,000 rows of data, with 29 columns. We can take a look at the dataset here:
+```{r}
+all_players <- read_csv('all_nba_stats.csv')
+all_players <- all_players %>% select(-X1, -slugSeason, -nameSchool, -idOrganization, -idTeam, -isRookie)
+teams <- read_csv("nbaallelo.csv")
+teams <- teams %>% filter(fran_id %in% c("Bulls", "Cavaliers", "Heat", "Wizards", "Lakers"))
+teams <- teams %>% group_by(fran_id, year_id, team_id) %>% summarise(won = sum(is_playoffs == 0 & game_result == "W"))
+print("Dataset")
+head(all_players %>% select(numberPlayerSeason, gp, agePlayer, pts, playerName, year))
+print("Column Names")
+colnames(all_players)
+```
+This only includes 5 columns that were selected, so all the column names are printed as well. This data is extensive, and will provide the bulk of the data that we need for the graphs. Even though this leaves out total points, rank of players, and other statistics, most of these can be obtained just by manipulating the data here. For example, totals can be obtained by multiplying points per game by games played for each season, and then summing those values up for each player. 
+
+
+```{r, eval=FALSE}
+all_players_stats <- function(player) {
+  print(player)
+  return(tryCatch(
+        as.data.frame(players_careers(players = player, modes = "PerGame")[[1, 5]]) %>% mutate(playerName = player) %>% mutate(year = sub("..-", "", slugSeason)), 
+      error = function(e){}
+    ))
+}
+
+combine_dfs <- function(players) {
+  l <- lapply(players, function(player) all_players_stats(player))
+  df <- do.call(bind_rows, l)
+  return(df)
+}
+
+first <- df_nba_player_dict[1:300,]
+second <- df_nba_player_dict[301:600,]
+
+all_players <- combine_dfs(first$namePlayer)
+write.csv(all_players, "all_nba_stats.csv")
+
+#Restart R session
+
+all_players2 <- combine_dfs(second$namePlayer)
+all_players <- read_csv('all_nba_stats.csv')
+all_players2 <- as.data.frame(all_players3)
+all_players2 <- all_players2 %>% mutate(year = as.double(year))
+all_players <- bind_rows(all_players, all_players2)
+write.csv(all_players, "all_nba_stats.csv")
+
+#Repeat for the rest of the players
+```
+
+
+
+## Data manipulation
+
+### Per Season Stats LeBron vs Jordan
+
+Next, we need to manipulate the data in order to make the charts that we need. First, creating a dataset that just has statistics for Michael Jordan and LeBron James will allow for over time charts. These charts can be used to compare these two great players. We can take the original dataset with all nba players in it, and filter out by the player's name being either Michael Jordan or LeBron James. This gets us close, but we have to do more. Michael Jordan retired two times midway through his career. In our dataset, this does not show up, he just does not have any rows for those years. However, when graphing that data, it will not show the separations that signify his retired years, instead the chart will just fill up the holes. So, we can add in four more rows to this dataset to represent the four years Michael Jordan was retired before returning to the NBA. For each row, most columns can be NA, except for playerName, year, and agePlayer. With NA in for the stats, it will tell the chart to put a separation in for that year. This will make the chart much more true to the data and give the audience more information. 
+
+```{r, message=FALSE, warnings=FALSE, results=FALSE}
+lebron <- return_player_stats("LeBron James")
+mj <- return_player_stats("Michael Jordan")
+```
+
+```{r eda-1}
+
+
+stats = rbind(lebron, mj)
+
+# Creates NA for Michael Jordans retired years, so graphs will show them as empty
+mj <- stats
+mj <- mj[1:4,]
+mj[TRUE] <- NA
+mj$year[1] = 1994
+mj$year[2] = 1999
+mj$year[3] = 2000
+mj$year[4] = 2001
+mj$agePlayer[1] = 30
+mj$agePlayer[2] = 35
+mj$agePlayer[3] = 36
+mj$agePlayer[4] = 37
+mj$playerName = "Michael Jordan"
+
+stats <- rbind(stats, mj)
+stats <- stats %>% mutate(year = as.numeric(year))
+head(stats)
+```
+
+### Mutate data for Career total stats
+
+Next we need to manipulate the dataset to include total stats. We can do this by multiplying per games stats by games played, grouping by player, and then summing those values. We do this for the 5 main statistics in basketball - Points, Assists, Rebounds, Steals, and Blocks. Finally, in order to allow for 5 different bar charts to show each of these stats, we pivot the dataset and make the stats type a new column. 
+
+
+
+```{r, message=FALSE, results=FALSE}
+lebron <- return_total_stats("LeBron James")
+mj <- return_total_stats("Michael Jordan")
+kareem <- return_total_stats("Kareem Abdul-Jabbar")
+malone <- return_total_stats("Karl Malone")
+kobe <- return_total_stats("Kobe Bryant")
+
+top5 <- rbind(lebron, mj, kareem, malone, kobe)
+
+totals <- top5 %>% filter(!is.na(pts)) %>% group_by(playerName) %>% 
+  summarise(cpts = sum(pts), 
+            ctrb = sum(treb), 
+            cast = sum(ast), 
+            cstl = sum(stl), 
+            cblk = sum(blk))
+totals <- totals %>% rename(Player = playerName)
+
+totals <- totals %>% pivot_longer(cols = starts_with("c"),
+                             names_to = "stat",
+                             names_prefix = "c",
+                             values_to = "total")
+
+```
+
+```{r}
+head(totals)
+```
+
+### Mutate data for ranks in each stat by year
+
+Next, we need to manipulate the dataset to include ranks of players in specific stats by year. This is done by grouping by year, and creating a new column for each stat that we want whose value is the sorted order of our original stat. We also need to include the NA data for Michael Jordan that we created earlier. Next, we filter for LeBron and Michael Jordan, since those are the only two players we will be looking at. Next, we create another dataset that takes the averages of the ranks over the years LeBron and Jordan have gotten. Pivoting this dataset allows for mulitple charts using the same plot as well.
+```{r}
+ranks <- all_players %>% group_by(year) %>% mutate(ptsrank = order(order(year, pts, decreasing=TRUE)), 
+                                                   astrank = order(order(year, ast, decreasing=TRUE)), 
+                                                   trebrank = order(order(year, treb, decreasing=TRUE)),
+                                                   pctFGrank = order(order(year, pctFG, decreasing=TRUE)),
+                                                   blkrank = order(order(year, blk, decreasing=TRUE)),
+                                                   stlrank = order(order(year, stl, decreasing=TRUE)),
+                                                   minrank = order(order(year, minutes, decreasing=TRUE)))
+
+mj <- ranks
+mj <- mj[1:4,]
+mj[TRUE] <- NA
+mj$year[1] = 1994
+mj$year[2] = 1999
+mj$year[3] = 2000
+mj$year[4] = 2001
+mj$agePlayer[1] = 30
+mj$agePlayer[2] = 35
+mj$agePlayer[3] = 36
+mj$agePlayer[4] = 37
+mj$playerName = "Michael Jordan"
+
+mj_bron <- rbind(ranks, mj)
+mj_bron <- mj_bron %>% filter(playerName == "LeBron James" | playerName == "Michael Jordan")
+
+mj_bron_avg <- ranks %>% filter(playerName == "LeBron James" | playerName == "Michael Jordan")
+mj_bron_avg[is.na(mj_bron_avg)] <- 0
+ 
+mj_bron_avg <- mj_bron_avg %>% group_by(playerName) %>% summarise(avgptsrank = mean(ptsrank),
+                                                                  avgastrank = mean(astrank),
+                                                                  avgtrebrank = mean(trebrank),
+                                                                  avgblkrank = mean(blkrank),
+                                                                  avgstlrank = mean(stlrank))
+
+mj_bron_avg <- mj_bron_avg %>% 
+                pivot_longer(cols = starts_with("avg"),
+                             names_to = "stat",
+                             names_prefix = "avg",
+                             values_to = "avgrank")
+
+print("Ranks dataset")
+mj_bron %>% select(numberPlayerSeason, gp, playerName, ptsrank, astrank, trebrank, blkrank, stlrank)
+print("Average Ranks Dataset")
+mj_bron_avg
+
+```
+
+That is the final dataset needed to complete the charts we will make. Because of the messiness of obtaining the data, the scraping stage is most time-consuming and difficult. However, once the data is saved to a csv, creating other useful datasets from the original data is relatively easy. Next, we move on to create the charts and see results from the data. 
+
+# Results
+
+## Graph 1: Stats over time
+
+The first chart we create is the per game stats over time chart. This chart allows comparison of players over their career.
+
+```{r}
+ggplot(stats, mapping = aes(x = agePlayer, y = pts, color = playerName)) + 
+  geom_line() + 
+  geom_point() + 
+  scale_color_brewer(palette="Set2") + 
+  scale_y_continuous(limits = c(0, 40),
+                     breaks = c(0, 10, 20, 30, 40), 
+                     labels = c("0", "10", "20", "30", "40 pts/\ngame")) + 
+  my_theme + 
+  labs(title = "Points Per Game Over Time", 
+       subtitle = "<b style='color:#66C2A4'>LeBron James</b> vs <b style='color:#FC8E62'>Michael Jordan</b>") + 
+  xlab("Age") + 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none",
+        plot.subtitle = element_markdown()) 
+# + 
+#   annotate("text", x = 30, y = 22, color = "#66C2A5", label="LeBron\nJames", fontface=2) + 
+#   annotate("text", x = 30, y = 36, color = "#FC8D62", label="Michael\nJordan", fontface=2)
+```
+Looking at this chart, the effort from including the NA rows pays off, as Jordan's retired years show up blank. From this chart, it is easy to see that Michael Jordan was a more prolific scorer throughout his career. LeBron was originally known for his scoring ability when he was young, but he has since changed his style of play signficantly. So, this chart does not tell the full story. If greatness was measured solely on points scored per game, Jordan would surely be the GOAT. However, there are many more important stats and metrics to compare these two great players. 
+
+```{r}
+ggplot(stats, mapping = aes(x = agePlayer, y = ast, color = playerName)) + 
+  geom_line() + 
+  geom_point() + 
+  scale_color_brewer(palette="Set2") + 
+  scale_y_continuous(limits = c(0, 12),
+                     breaks = c(0, 3, 6, 9, 12), 
+                     labels = c("0", "3", "6", "9", "12 assists/\ngame")) + 
+  my_theme + 
+  labs(title = "Assists Per Game Over Time", 
+       subtitle = "<b style='color:#66C2A4'>LeBron James</b> vs <b style='color:#FC8E62'>Michael Jordan</b>") + 
+  xlab("Age") + 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none",
+        plot.subtitle = element_markdown()) 
+# + 
+#   annotate("text", x = 30, y =9, color = "#66C2A5", label="LeBron\nJames", fontface=2) + 
+#   annotate("text", x = 30, y = 4, color = "#FC8D62", label="Michael\nJordan", fontface=2)
+```
+This chart shows the players assists per game over time. Despite Michael Jordan being smaller and a guard, LeBron actually consistantly has had more assists per game over his career. In addition, he has continued to rack up more assists per game as he grows older and more experienced. So, while points will be considered by many to be more important, if greatness is measured by versatility, LeBron would probably win. Being a 6'9, 250 lbs small forward that can also dish out passes is a much more versatile player, despite Jordan being a better individual scorer. 
+
+
+## Graph 2: Career Stats
+
+Next, we will look at career total stats. This should show how Jordan and LeBron measure up to the other greats of the NBA. Some would measure greatness and how many records a player holds, and how impressive their career total stats are compared to other players. 
+
+```{r eda-2}
+
+ggplot(totals, aes(x = Player, y = total, fill = Player)) + 
+  geom_bar(stat="identity") + 
+  facet_wrap(~ stat, labeller = labeller(stat = c("ast" = "Assists",
+                                                  "blk" = "Blocks",
+                                                  "pts" = "Points",
+                                                  "stl" = "Steals",
+                                                  "trb" = "Rebounds")))+ 
+  my_theme + 
+  ylab("Total") + 
+  labs(title = "Career Stats of Top 5 Scorers",
+       subtitle = paste("<b style='color:#66C2A4'>Kareem Abdul-Jabbar</b>, <b style='color:#FC8E62'>Kobe Bryant</b>, <b style='color:#8EA0CA'>LeBron James</b>, <b style='color:#E68BC2'>Michael Jordan</b>, and <b style='color:#A6D753'>Karl Malone</b>")) + 
+  scale_fill_brewer(palette="Set2") + 
+  theme(legend.position = "none",
+        # axis.text.x = element_text(angle = 60, margin = margin(0,0,0,0,"pt"), hjust= 0.95),
+        panel.spacing = unit(0.8, "lines"),
+        axis.title.y = element_text(angle = 0, vjust = 0.5),
+        axis.title.x = element_blank(),
+        plot.subtitle = element_markdown(),
+        axis.ticks.x= element_blank(),
+        axis.text.x = element_blank())
+```
+
+In this chart, the top 5 career total scorers of all time are compared. If greatness was mainly based on career total records, then Kareem Abdul-Jabbar would actually have a great argument for greatest of all time. He has the most career points of any player, and he dominates other categories like blocks and rebounds. Now, this is slightly unfair just comparing those stats with the top scorers, as Kareem was the most traditionally big man out of these players. That being said, Kareem mainly makes his way up these stats because he has played a huge number of minutes and games, and his success was typically with other great players on his team. While in this analysis we only look at regular season, one of the main reasons Kareem is not considered in the same league as LeBron and Jordan is due to his playoff performance. Despite winning 6 NBA Championships, Kareem only won two Finals MVPs, meaning he was not even considered the best player on his team for four of his championships. 
+
+## Graph 3: Career Success
+
+Moving on to the next analysis, we look at each players affect on the teams they played for, and their teams' regular season success. A players' impact on making the team better is an important part of them being great. If a player has great stats, but he ends up taking too many shots to get those stats and makes the team perform worse, that effect would show up in this chart. The data for this only goes up until 2015, which is unfortunate as it leaves 5 season off from LeBron. 
+
+```{r, fig.width=6, fig.height=4}
+
+mj <- all_players %>% select(playerName, slugTeam, year) %>% filter(playerName == "Michael Jordan" & slugTeam == "CHI")
+lebron <- all_players %>% select(playerName, slugTeam, year) %>% filter(playerName == "LeBron James" & slugTeam == "CLE")
+lebron_heat <- all_players %>% select(playerName, slugTeam, year) %>% filter(playerName == "LeBron James" & slugTeam == "MIA")
+ggplot(teams %>% filter(fran_id == "Bulls")) + 
+  geom_point(aes(x = year_id, y = won, group=1, color = year_id %in% mj$year)) + 
+  geom_line(aes(x = year_id, y = won, group=1, color = year_id %in% mj$year)) + 
+  scale_color_brewer(palette="Set2") + 
+  my_theme + 
+  labs(title = "Chicago Bulls Perfomance with/without Michael Jordan",
+       subtitle = "1967-2015") + 
+  ylab("Games\nWon") + 
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(angle = 0, vjust = 0.5)) + 
+  annotate("text", x = 1986, y = 63, color = "#FC8D62", label="Jordan playing\non Bulls", fontface=2) + 
+  annotate("text", x = 1973, y = 63, color = "#66C2A5", label="Jordan not\nplaying on Bulls", fontface=2)
+
+```
+
+```{r, fig.width=6, fig.height=4}
+ggplot(teams %>% filter(fran_id == "Cavaliers")) + 
+  geom_point(aes(x = year_id, y = won, group=1, color = year_id %in% lebron$year)) + 
+  geom_line(aes(x = year_id, y = won, group=1, color = year_id %in% lebron$year)) + 
+  scale_color_brewer(palette="Set2") + 
+  my_theme + 
+  labs(title = "Cleveland Cavaliers Perfomance with/without LeBron James",
+       subtitle = "1970-2015") + 
+  ylab("Games\nWon") + 
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(angle = 0, vjust = 0.5)) + 
+  annotate("text", x = 2003, y = 63, color = "#FC8D62", label="LeBron playing\non Cavaliers", fontface=2) + 
+  annotate("text", x = 1985, y = 63, color = "#66C2A5", label="LeBron not\nplaying on Cavaliers", fontface=2)
+```
+
+```{r, fig.width=6, fig.height=4}
+ggplot(teams %>% filter(fran_id == "Heat")) + 
+  geom_point(aes(x = year_id, y = won, group=1, color = year_id %in% lebron_heat$year)) + 
+  geom_line(aes(x = year_id, y = won, group=1, color = year_id %in% lebron_heat$year)) + 
+  scale_color_brewer(palette="Set2") + 
+  my_theme + 
+  labs(title = "Miami Heat Perfomance with/without LeBron James",
+       subtitle = "1989-2015") + 
+  ylab("Games\nWon") + 
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(angle = 0, vjust = 0.5)) + 
+  annotate("text", x = 2009, y = 63, color = "#FC8D62", label="LeBron playing\non Heat", fontface=2) + 
+  annotate("text", x = 2002, y = 63, color = "#66C2A5", label="LeBron not\nplaying on Heat", fontface=2)
+```
+
+The effect of both Jordan on the Bulls and LeBron on the Cavaliers is significant and clearly shown by these charts. Both teams were subpar, and the signing and emergence of these two stars steadily improved their teams until they were dominant. It can also be seen that when these players left their teams, the dropoff in the teams' performance is huge. The one exception is LeBron and the Heat. While the team does perform better, it is much less of a stark difference. This is partially because the Heat were a decent team before LeBron joined the team, so the improvement is less dramatic. If teams success was a major part of greatness, there would be no clear winner. Both players made their teams much better.
+
+
+## Graph 4: Players' Rank in Stats
+
+The final analysis is players' rank in stats compared to the rest of the players that season. This will provide information as to how dominant a player was in their respective league. The drawback of this analysis is that it leaves out the possibility that the league just became more competitive and talented as time has gone on. 
+
+```{r}
+ggplot(mj_bron) + 
+  geom_line(mapping = aes(x = agePlayer, y = ptsrank, color = playerName)) + 
+  geom_point(mapping = aes(x = agePlayer, y = ptsrank, color = playerName)) + 
+  scale_color_brewer(palette="Set2") + 
+  my_theme + 
+  labs(title = "Scoring Rank Over Time", 
+       subtitle = "<b style='color:#66C2A4'>LeBron James</b> vs <b style='color:#FC8E62'>Michael Jordan</b>") + 
+  xlab("Age") + 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none",
+        plot.subtitle = element_markdown()) 
+# + 
+#   annotate("text", x = 30, y = 10, color = "#66C2A5", label="LeBron\nJames", fontface=2) + 
+#   annotate("text", x = 31, y = 2, color = "#FC8D62", label="Michael\nJordan", fontface=2)
+
+```
+
+```{r}
+ggplot(mj_bron) + 
+  geom_line(mapping = aes(x = agePlayer, y = astrank, color = playerName)) + 
+  geom_point(mapping = aes(x = agePlayer, y = astrank, color = playerName)) + 
+  scale_color_brewer(palette="Set2") + 
+  my_theme + 
+  labs(title = "Assist Rank Over Time", 
+       subtitle = "<b style='color:#66C2A4'>LeBron James</b> vs <b style='color:#FC8E62'>Michael Jordan</b>") + 
+  xlab("Age") + 
+  theme(axis.title.y = element_blank(), 
+        legend.position = "none",
+        plot.subtitle = element_markdown()) 
+# + 
+#   annotate("text", x = 28, y = 3, color = "#66C2A5", label="LeBron\nJames", fontface=2) + 
+#   annotate("text", x = 27, y = 40, color = "#FC8D62", label="Michael\nJordan", fontface=2)
+```
+
+From these charts, we see the same general trend as from the per game stats over time charts. Michael Jordan is a better scorer and LeBron is a better assister. However, this chart illuminates just how dominant Jordan was in scoring. He was ranked number one in scoring for seven years straight. He then retired for one year, was not ranked first for one year, and then he took back first place for three more years. If greatness is mainly a measure for how dominant a player was in their respective league, then Jordan probably wins. He completely dominated during his era, whereas LeBron is still dominant but by smaller margins.
+
+```{r}
+ggplot(mj_bron_avg) + 
+  geom_errorbar(aes(x = playerName, ymin = avgrank, ymax = avgrank, color = playerName)) + 
+  scale_y_reverse() + 
+  facet_wrap(~ stat, labeller = labeller(stat = c("astrank" = "Assists",
+                                                  "blkrank" = "Blocks",
+                                                  "ptsrank" = "Points",
+                                                  "stlrank" = "Steals",
+                                                  "trebrank" = "Rebounds"))) + 
+  scale_color_brewer(palette="Set2") + 
+  my_theme + 
+  theme(legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(angle = 0, vjust = 0.5),
+        plot.subtitle = element_markdown(),
+        axis.text.x = element_blank()) + 
+  ylab("Rank") + 
+  labs(title = "Career Average of Ranks by Stat",
+       subtitle = "<b style='color:#66C2A4'>LeBron James</b> vs <b style='color:#FC8E62'>Michael Jordan</b>")
+```
+
+The final chart sums up some of the main trends we have been seeing throughout this analysis. It plots average rank for each stat for both LeBron and Jordan. LeBron is more versatile, having a high rank in assists, as well as beating out Jordan in rebounds. The two are close in average points rank. Jordan does have better steal ranks, but steals are more of a niche stat than either assists or rebounds. 
+
+# Discussion
+
+## Conclusion
+
+This paper does not come to a final conclusion about which player is actually greater. This is partially because of the narrow part of the data this project looked at, and it is partially because the answer to this question mainly depends on the definition used for "greatness". If greatness is mainly about dominating the league that a player played in, Michael Jordan probably wins. However, if greatness includes versatility and consistency over many years, LeBron probably beats out Jordan. To come to more complete conclusion and reveal more of the nuances, more analysis would have to be done. 
+
+## Limitations
+
+There were many limitations to this analysis. First, this analysis only focused on the regular season. Many of the more important parts of greatness according to some come during the playoffs. NBA Championships, playoff stats, and Finals appearances were all left out of the analysis. This is by design, as this was the initial analysis to be done. In addition, season awards were not analyzed. MVP titles, scoring titles, and all-NBA teams are typically part of the discussion, but these awards were too broad for this narrow focused analysis. That being said, this analysis allows for the discussion to begin, and it outlines many of the general trends that would be seen when looking at the other data. The regular season is an important part of an NBA players' career, as it makes up the bulk of their time spent on the game.
+
+## Future Analyses
+
+The opportunity for future analyses is great. First, looking at the other data that was left out of this analysis, like playoff stats and regular season awards, would be a good start. In addition, looking at more players could be useful. While many solely consider LeBron and Jordan to be the only two players in the GOAT debate, some commentators consider other players to be in the discussion. Finally, broadening the research question could be a next step. The greatest of all time debate is a topical and interesting one, but it is certainly not the only use for NBA stats.
+
+## References
+
+Shiny: https://sethrkeim.shinyapps.io/NBA_Stats/?_ga=2.198771496.664884060.1612111709-732976651.1611176855
+
+Kaggle: https://www.kaggle.com/drgilermo/nba-players-stats?select=Seasons_Stats.csv
+
+nbastatR: https://github.com/abresler/nbastatR
+
+Basketball-Reference: https://www.basketball-reference.com/
